@@ -14,7 +14,7 @@ class EasyCloudStorageServiceProvider extends ServiceProvider
     public function register(): void
     {
         // Merge the package's config file with the application’s config.
-        $this->mergeConfigFrom(__DIR__ . '/../config/easycloudstorage.php', 'easycloudstorage');
+        $this->mergeConfigFrom(__DIR__ . '/../Config/easycloudstorage.php', 'easycloudstorage');
     }
 
     /**
@@ -29,7 +29,7 @@ class EasyCloudStorageServiceProvider extends ServiceProvider
         if ($this->app->runningInConsole()) {
             // Publish the package's configuration file to the application config path
             $this->publishes([
-                __DIR__ . '/../config/easycloudstorage.php' => config_path('easycloudstorage.php'),
+                __DIR__ . '/../Config/easycloudstorage.php' => config_path('easycloudstorage.php'),
             ], 'config');
         }
     }
