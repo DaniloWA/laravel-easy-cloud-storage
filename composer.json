@@ -1,6 +1,6 @@
 {
   "name": "danilowa/laravel-easy-cloud-storage",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "A robust and flexible Laravel package for managing files in various cloud storage providers.",
   "type": "library",
   "license": "MIT",

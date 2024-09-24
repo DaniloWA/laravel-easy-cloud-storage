@@ -5,8 +5,8 @@ namespace Danilowa\LaravelEasyCloudStorage\Facades;
 use Illuminate\Support\Facades\Facade;
 
 /**
- * @method static string|false upload(\Illuminate\Http\UploadedFile $file, string $path, ?string $disk = null)
- * @method static \Symfony\Component\HttpFoundation\BinaryFileResponse download(string $path, ?string $disk = null)
+ * @method static string|false upload(\Illuminate\Http\UploadedFile $file, string $path, ?string $newName = null, ?string $disk = null)
+ * @method static \Symfony\Component\HttpFoundation\BinaryFileResponse download(string $path, ?string $newName = null, ?string $disk = null)
  * @method static string url(string $path, ?string $disk = null)
  * @method static bool delete(string $path, ?string $disk = null)
  * @method static bool exists(string $path, ?string $disk = null)

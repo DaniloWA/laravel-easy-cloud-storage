@@ -3,6 +3,7 @@
 namespace Danilowa\LaravelEasyCloudStorage\Providers;
 
 use Illuminate\Support\ServiceProvider;
+use Danilowa\LaravelEasyCloudStorage\EasyStorage;
 
 class EasyCloudStorageServiceProvider extends ServiceProvider
 {
@@ -13,8 +14,10 @@ class EasyCloudStorageServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        // Merge the package's config file with the application’s config.
         $this->mergeConfigFrom(__DIR__ . '/../Config/easycloudstorage.php', 'easycloudstorage');
+        $this->app->singleton('easy-storage', function ($app) {
+            return new EasyStorage();
+        });
     }
 
     /**
@@ -25,9 +28,7 @@ class EasyCloudStorageServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        // Check if the application is running in the console
         if ($this->app->runningInConsole()) {
-            // Publish the package's configuration file to the application config path
             $this->publishes([
                 __DIR__ . '/../Config/easycloudstorage.php' => config_path('easycloudstorage.php'),
             ], 'config');

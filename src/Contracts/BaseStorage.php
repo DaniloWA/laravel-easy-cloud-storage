@@ -3,6 +3,7 @@
 namespace Danilowa\LaravelEasyCloudStorage\Contracts;
 
 use Illuminate\Http\UploadedFile;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 /**
  * Interface BaseStorage
@@ -12,23 +13,26 @@ use Illuminate\Http\UploadedFile;
 interface BaseStorage
 {
     /**
-     * Uploads a file to the specified path.
+     * Upload a file to the specified path on the storage disk.
      *
-     * @param \Illuminate\Http\UploadedFile $file The file to be uploaded.
-     * @param string $path The path where the file will be stored.
-     * @param string|null $disk The disk to use (optional).
-     * @return string|false The name of the saved file or false on failure.
+     * @param UploadedFile $file The file to upload.
+     * @param string $path The destination path for the upload.
+     * @param string|null $newName Optional. The new name for the file. If not provided, the original name is used.
+     * @param string|null $disk Optional. The storage disk name. If null, uses the default disk.
+     * @return string|false The file path if successful; false otherwise.
      */
-    public function upload(UploadedFile $file, string $path, ?string $disk = null): string|false;
+    public function upload(UploadedFile $file, string $path, ?string $newName = null, ?string $disk = null): string|false;
 
     /**
-     * Downloads a file from the specified path.
-     *
-     * @param string $path The path of the file to be downloaded.
-     * @param string|null $disk The disk to use (optional).
-     * @return \Symfony\Component\HttpFoundation\BinaryFileResponse The response for file download.
-     */
-    public function download(string $path, ?string $disk = null);
+        * Download a file from the specified path on the storage disk.
+        *
+        * @param string $path The path of the file to download.
+        * @param string|null $newName Optional. The new name for the downloaded file. If not provided, the original name is used.
+        * @param string|null $disk Optional. The storage disk name. If null, uses the default disk.
+        * @return BinaryFileResponse
+        * @throws \Symfony\Component\HttpKernel\Exception\NotFoundHttpException If the file does not exist.
+        */
+    public function download(string $path, ?string $newName = null, ?string $disk = null): BinaryFileResponse;
 
     /**
      * Returns the URL of the stored file.
@@ -139,7 +143,7 @@ interface BaseStorage
      *
      * @param string $path The path of the directory to be created.
      * @param string|null $disk The disk to use (optional).
-     * @return bool Returns true on success, false otherwise.
+     * @return bool Returns true on success, false if the directory already exists or on failure.
      */
     public function makeDirectory(string $path, ?string $disk = null): bool;
 
@@ -148,7 +152,7 @@ interface BaseStorage
      *
      * @param string $path The path of the directory to be deleted.
      * @param string|null $disk The disk to use (optional).
-     * @return bool Returns true on success, false otherwise.
+     * @return bool Returns true on success, false if the directory doesn't exist or on failure.
      */
     public function deleteDirectory(string $path, ?string $disk = null): bool;
 

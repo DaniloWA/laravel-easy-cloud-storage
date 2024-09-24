@@ -7,7 +7,9 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Danilowa\LaravelEasyCloudStorage\CustomMethod;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Danilowa\LaravelEasyCloudStorage\Contracts\BaseStorage;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Danilowa\LaravelEasyCloudStorage\Exceptions\StorageMethodNotSupportedException;
 
 /**
@@ -48,27 +50,64 @@ class EasyStorage implements BaseStorage
      * Upload a file to the specified path on the storage disk.
      *
      * @param UploadedFile $file The file to upload.
-     * @param string $path The path to upload the file to.
-     * @param string|null $disk The storage disk name. If null, uses the default disk.
-     * @return string|false The file path if successful, false otherwise.
+     * @param string $path The destination path for the upload.
+     * @param string|null $newName Optional. The new name for the file. If not provided, the original name is used.
+     * @param string|null $disk Optional. The storage disk name. If null, uses the default disk.
+     * @return string|false The file path if successful; false otherwise.
      */
-    public function upload(UploadedFile $file, string $path, ?string $disk = null): string|false
+    public function upload(UploadedFile $file, string $path, ?string $newName = null, ?string $disk = null): string|false
     {
-        return $this->executeMethod('putFileAs', [$path, $file, $file->getClientOriginalName()], $disk);
+        $fileName = $this->getUniqueFileName($file, $path, $newName, $disk);
+        return $this->executeMethod('putFileAs', [$path, $file, $fileName], $disk);
+    }
+
+    /**
+     * Generate a unique file name to avoid conflicts in the storage.
+     *
+     * @param UploadedFile $file The file being uploaded.
+     * @param string $path The destination path.
+     * @param string|null $newName Optional. The new name for the file.
+     * @param string|null $disk Optional. The storage disk name.
+     * @return string The unique file name.
+     */
+    private function getUniqueFileName(UploadedFile $file, string $path, ?string $newName = null, ?string $disk = null): string
+    {
+        $fileName = $newName ?? $file->getClientOriginalName();
+        $fullPath = $path . '/' . $fileName;
+
+        $i = 1;
+        while ($this->exists($fullPath, $disk)) {
+            $fileName = pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME) . "_{$i}." . $file->getClientOriginalExtension();
+            $fullPath = $path . '/' . $fileName;
+            $i++;
+        }
+
+        return $fileName;
     }
 
     /**
      * Download a file from the specified path on the storage disk.
      *
      * @param string $path The path of the file to download.
-     * @param string|null $disk The storage disk name. If null, uses the default disk.
+     * @param string|null $newName Optional. The new name for the downloaded file. If not provided, the original name is used.
+     * @param string|null $disk Optional. The storage disk name. If null, uses the default disk.
      * @return \Symfony\Component\HttpFoundation\BinaryFileResponse
+     * @throws \Symfony\Component\HttpKernel\Exception\NotFoundHttpException If the file does not exist.
      */
-    public function download(string $path, ?string $disk = null)
+    public function download(string $path, ?string $newName = null, ?string $disk = null): BinaryFileResponse
     {
-        $fullPath = $this->disk($disk)->path($path);
-        return response()->download($fullPath);
+        $storageDisk = $this->disk($disk);
+        $fullPath = $storageDisk->path($path);
+
+        if (!$storageDisk->exists($path)) {
+            throw new NotFoundHttpException("File not found at path: {$path}");
+        }
+
+        $fileName = $newName ?? basename($path);
+
+        return response()->download($fullPath, $fileName);
     }
+
 
     /**
      * Get the URL of a file in the storage disk.
@@ -153,6 +192,20 @@ class EasyStorage implements BaseStorage
      */
     public function move(string $oldPath, string $newPath, ?string $disk = null): bool
     {
+        $storageDisk = $this->disk($disk);
+    
+        if ($storageDisk->exists($newPath)) {
+            $pathInfo = pathinfo($newPath);
+            $baseName = $pathInfo['filename'];
+            $extension = isset($pathInfo['extension']) ? '.' . $pathInfo['extension'] : '';
+            $i = 1;
+
+            do {
+                $newPath = $pathInfo['dirname'] . '/' . $baseName . "_{$i}" . $extension;
+                $i++;
+            } while ($storageDisk->exists($newPath));
+        }
+
         return $this->executeMethod('move', [$oldPath, $newPath], $disk);
     }
 
@@ -178,6 +231,20 @@ class EasyStorage implements BaseStorage
      */
     public function copy(string $sourcePath, string $destinationPath, ?string $disk = null): bool
     {
+        $storageDisk = $this->disk($disk);
+
+        if ($storageDisk->exists($destinationPath)) {
+            $pathInfo = pathinfo($destinationPath);
+            $baseName = $pathInfo['filename'];
+            $extension = isset($pathInfo['extension']) ? '.' . $pathInfo['extension'] : '';
+            $i = 1;
+
+            do {
+                $destinationPath = $pathInfo['dirname'] . '/' . $baseName . "_copy_{$i}" . $extension;
+                $i++;
+            } while ($storageDisk->exists($destinationPath));
+        }
+
         return $this->executeMethod('copy', [$sourcePath, $destinationPath], $disk);
     }
 
@@ -191,6 +258,10 @@ class EasyStorage implements BaseStorage
      */
     public function prepend(string $path, string $data, ?string $disk = null): bool
     {
+        if (!$this->disk($disk)->exists($path)) {
+            throw new NotFoundHttpException("File not found for prepending data.");
+        }
+    
         return $this->executeMethod('prepend', [$path, $data], $disk);
     }
 
@@ -204,6 +275,10 @@ class EasyStorage implements BaseStorage
      */
     public function append(string $path, string $data, ?string $disk = null): bool
     {
+        if (!$this->disk($disk)->exists($path)) {
+            throw new NotFoundHttpException("File not found for appending data.");
+        }
+    
         return $this->executeMethod('append', [$path, $data], $disk);
     }
 
@@ -212,10 +287,14 @@ class EasyStorage implements BaseStorage
      *
      * @param string $path The path of the directory to create.
      * @param string|null $disk The storage disk name. If null, uses the default disk.
-     * @return bool True if created, false otherwise.
+     * @return bool True if created, false if it already exists or on failure.
      */
     public function makeDirectory(string $path, ?string $disk = null): bool
     {
+        if ($this->disk($disk)->exists($path)) {
+            return false;
+        }
+    
         return $this->executeMethod('makeDirectory', [$path], $disk);
     }
 
@@ -224,10 +303,14 @@ class EasyStorage implements BaseStorage
      *
      * @param string $path The path of the directory to delete.
      * @param string|null $disk The storage disk name. If null, uses the default disk.
-     * @return bool True if deleted, false otherwise.
+     * @return bool True if deleted, false if it doesn't exist or on failure.
      */
     public function deleteDirectory(string $path, ?string $disk = null): bool
     {
+        if (!$this->disk($disk)->exists($path)) {
+            return false;
+        }
+
         return $this->executeMethod('deleteDirectory', [$path], $disk);
     }
 
