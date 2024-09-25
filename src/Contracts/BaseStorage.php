@@ -18,143 +18,136 @@ interface BaseStorage
      * @param UploadedFile $file The file to upload.
      * @param string $path The destination path for the upload.
      * @param string|null $newName Optional. The new name for the file. If not provided, the original name is used.
-     * @param string|null $disk Optional. The storage disk name. If null, uses the default disk.
      * @return string|false The file path if successful; false otherwise.
      */
-    public function upload(UploadedFile $file, string $path, ?string $newName = null, ?string $disk = null): string|false;
+    public function upload(UploadedFile $file, string $path, ?string $newName = null): string|false;
 
     /**
-        * Download a file from the specified path on the storage disk.
-        *
-        * @param string $path The path of the file to download.
-        * @param string|null $newName Optional. The new name for the downloaded file. If not provided, the original name is used.
-        * @param string|null $disk Optional. The storage disk name. If null, uses the default disk.
-        * @return BinaryFileResponse
-        * @throws \Symfony\Component\HttpKernel\Exception\NotFoundHttpException If the file does not exist.
-        */
-    public function download(string $path, ?string $newName = null, ?string $disk = null): BinaryFileResponse;
+     * Download a file from the specified path on the storage disk.
+     *
+     * @param string $path The path of the file to download.
+     * @param string|null $newName Optional. The new name for the downloaded file. If not provided, the original name is used.
+     * @return BinaryFileResponse
+     * @throws \Symfony\Component\HttpKernel\Exception\NotFoundHttpException If the file does not exist.
+     */
+    public function download(string $path, ?string $newName = null): BinaryFileResponse;
 
     /**
      * Returns the URL of the stored file.
      *
      * @param string $path The path of the file.
-     * @param string|null $disk The disk to use (optional).
      * @return string The URL of the file.
      */
-    public function url(string $path, ?string $disk = null): string;
+    public function url(string $path): string;
 
     /**
      * Deletes a file at the specified path.
      *
      * @param string $path The path of the file to be deleted.
-     * @param string|null $disk The disk to use (optional).
      * @return bool Returns true on success, false otherwise.
      */
-    public function delete(string $path, ?string $disk = null): bool;
+    public function delete(string $path): bool;
 
     /**
      * Checks if a file exists at the specified path.
      *
      * @param string $path The path of the file.
-     * @param string|null $disk The disk to use (optional).
      * @return bool Returns true if it exists, false otherwise.
      */
-    public function exists(string $path, ?string $disk = null): bool;
-
-    /**
-     * Obtains the metadata of a file.
-     *
-     * @param string $path The path of the file.
-     * @param string|null $disk The disk to use (optional).
-     * @return array|false Returns an array with the metadata or false on failure.
-     */
-    public function getMetadata(string $path, ?string $disk = null): array|false;
-
-    /**
-     * Sets the metadata of a file.
-     *
-     * @param string $path The path of the file.
-     * @param array $metadata The metadata to be set.
-     * @param string|null $disk The disk to use (optional).
-     * @return bool Returns true on success, false otherwise.
-     */
-    public function setMetadata(string $path, array $metadata, ?string $disk = null): bool;
-
-    /**
-     * Lists the files in a directory.
-     *
-     * @param string $directory The path of the directory.
-     * @param string|null $disk The disk to use (optional).
-     * @return array The list of files.
-     */
-    public function listFiles(string $directory, ?string $disk = null): array;
-
-    /**
-     * Moves or renames a file.
-     *
-     * @param string $oldPath The old path of the file.
-     * @param string $newPath The new path of the file.
-     * @param string|null $disk The disk to use (optional).
-     * @return bool Returns true on success, false otherwise.
-     */
-    public function move(string $oldPath, string $newPath, ?string $disk = null): bool;
-
-    /**
-     * Gets the MIME type of a file.
-     *
-     * @param string $path The path of the file.
-     * @param string|null $disk The disk to use (optional).
-     * @return string The MIME type of the file.
-     */
-    public function getFileType(string $path, ?string $disk = null): string;
+    public function exists(string $path): bool;
 
     /**
      * Copies a file from a source path to a destination path.
      *
-     * @param string $sourcePath The path of the source file.
-     * @param string $destinationPath The destination path.
-     * @param string|null $disk The disk to use (optional).
+     * @param string $from The path of the source file.
+     * @param string $to The destination path.
      * @return bool Returns true on success, false otherwise.
      */
-    public function copy(string $sourcePath, string $destinationPath, ?string $disk = null): bool;
+    public function copy(string $from, string $to): bool;
+
+    /**
+     * Moves or renames a file.
+     *
+     * @param string $from The old path of the file.
+     * @param string $to The new path of the file.
+     * @return bool Returns true on success, false otherwise.
+     */
+    public function move(string $from, string $to): bool;
+
+    /**
+     * Gets the size of a file.
+     *
+     * @param string $path The path of the file.
+     * @return int|false The size of the file in bytes, or false on failure.
+     */
+    public function size(string $path): int|false;
+
+    /**
+     * Gets the last modified time of a file.
+     *
+     * @param string $path The path of the file.
+     * @return int|false The last modified timestamp, or false on failure.
+     */
+    public function lastModified(string $path): int|false;
+
+    /**
+     * Gets the metadata of a file.
+     *
+     * @param string $path The path of the file.
+     * @return array|false An array of metadata if successful; false otherwise.
+     */
+    public function getMetadata(string $path): array|false;
+
+    /**
+     * Sets metadata for a file.
+     *
+     * @param string $path The path of the file.
+     * @param array $metadata The metadata to set.
+     * @return bool Returns true on success, false otherwise.
+     */
+    public function setMetadata(string $path, array $metadata): bool;
+
+    /**
+     * Lists all files in the specified directory.
+     *
+     * @param string $directory The directory path.
+     * @return array An array of file paths.
+     */
+    public function listFiles(string $directory): array;
 
     /**
      * Prepends data to a file.
      *
      * @param string $path The path of the file.
-     * @param string $data The data to be prepended.
-     * @param string|null $disk The disk to use (optional).
+     * @param string $data The data to prepend.
      * @return bool Returns true on success, false otherwise.
      */
-    public function prepend(string $path, string $data, ?string $disk = null): bool;
+    public function prepend(string $path, string $data): bool;
 
     /**
-     * Appends data to the end of a file.
+     * Appends data to a file.
      *
      * @param string $path The path of the file.
-     * @param string $data The data to be appended.
-     * @param string|null $disk The disk to use (optional).
+     * @param string $data The data to append.
      * @return bool Returns true on success, false otherwise.
      */
-    public function append(string $path, string $data, ?string $disk = null): bool;
+    public function append(string $path, string $data): bool;
 
     /**
      * Creates a new directory.
      *
-     * @param string $path The path of the directory to be created.
-     * @param string|null $disk The disk to use (optional).
-     * @return bool Returns true on success, false if the directory already exists or on failure.
+     * @param string $path The path of the directory to create.
+     * @return bool Returns true on success, false otherwise.
      */
-    public function makeDirectory(string $path, ?string $disk = null): bool;
+    public function makeDirectory(string $path): bool;
 
     /**
      * Deletes a directory.
      *
-     * @param string $path The path of the directory to be deleted.
-     * @param string|null $disk The disk to use (optional).
-     * @return bool Returns true on success, false if the directory doesn't exist or on failure.
+     * @param string $path The path of the directory to delete.
+     * @return bool Returns true on success, false otherwise.
      */
-    public function deleteDirectory(string $path, ?string $disk = null): bool;
+    public function deleteDirectory(string $path): bool;
 
     /**
      * Sets whether to log errors during operations.
@@ -171,15 +164,4 @@ interface BaseStorage
      * @return self
      */
     public function withError(bool $throw = true): self;
-
-    /**
-     * Executes a custom method with parameters.
-     *
-     * @param string $method The name of the custom method.
-     * @param array $parameters The parameters for the method.
-     * @param string|null $disk The disk to use (optional).
-     * @return mixed The result of the custom method execution.
-     */
-    public function customMethod(string $method, array $parameters = [], ?string $disk = null);
-
 }

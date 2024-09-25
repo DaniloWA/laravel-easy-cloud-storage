@@ -6,17 +6,11 @@ use Exception;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
-use Danilowa\LaravelEasyCloudStorage\CustomMethod;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Danilowa\LaravelEasyCloudStorage\Contracts\BaseStorage;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Danilowa\LaravelEasyCloudStorage\Exceptions\StorageMethodNotSupportedException;
 
-/**
- * Class EasyStorage
- *
- * Provides methods for cloud storage manipulation based on the BaseStorage contract.
- */
 class EasyStorage implements BaseStorage
 {
     protected string $disk;
@@ -25,20 +19,69 @@ class EasyStorage implements BaseStorage
 
     /**
      * EasyStorage constructor.
-     *
-     * @param string|null $disk The storage disk to use. Defaults to the configured default disk.
+     * @param string|null $disk
      */
     public function __construct(?string $disk = null)
     {
         $this->disk = $disk ?: config('easycloudstorage.default');
-        $this->logErrors = config('easycloudstorage.log_errors', true);
-        $this->throwErrors = config('easycloudstorage.throw_errors', true);
+        $this->logErrors = false;
+        $this->throwErrors = false;
     }
 
     /**
-     * Get the storage disk instance.
+     * Set the disk.
      *
-     * @param string|null $disk The storage disk name. If null, uses the default disk.
+     * @param string $disk
+     * @return self
+     */
+    public function setDisk(string $disk): self
+    {
+        $this->disk = $disk;
+        return $this;
+    }
+
+    /**
+     * Enable or disable logging of errors.
+     *
+     * @param bool $log
+     * @return self
+     */
+    public function withLog(bool $log = true): self
+    {
+        $this->logErrors = $log;
+        return $this;
+    }
+
+    /**
+     * Enable or disable throwing of errors.
+     *
+     * @param bool $throw
+     * @return self
+     */
+    public function withError(bool $throw = true): self
+    {
+        $this->throwErrors = $throw;
+        return $this;
+    }
+
+    /**
+     * Upload a file to the storage.
+     *
+     * @param UploadedFile $file
+     * @param string $path
+     * @param string|null $newName
+     * @return string|false
+     */
+    public function upload(UploadedFile $file, string $path, ?string $newName = null): string|false
+    {
+        $fileName = $this->getUniqueFileName($file, $path, $newName);
+        return $this->executeMethod('putFileAs', [$path, $file, $fileName]);
+    }
+
+    /**
+     * Get the disk instance.
+     *
+     * @param string|null $disk
      * @return \Illuminate\Contracts\Filesystem\Filesystem
      */
     protected function disk(?string $disk = null)
@@ -47,36 +90,20 @@ class EasyStorage implements BaseStorage
     }
 
     /**
-     * Upload a file to the specified path on the storage disk.
+     * Get a unique file name for the uploaded file.
      *
-     * @param UploadedFile $file The file to upload.
-     * @param string $path The destination path for the upload.
-     * @param string|null $newName Optional. The new name for the file. If not provided, the original name is used.
-     * @param string|null $disk Optional. The storage disk name. If null, uses the default disk.
-     * @return string|false The file path if successful; false otherwise.
+     * @param UploadedFile $file
+     * @param string $path
+     * @param string|null $newName
+     * @return string
      */
-    public function upload(UploadedFile $file, string $path, ?string $newName = null, ?string $disk = null): string|false
-    {
-        $fileName = $this->getUniqueFileName($file, $path, $newName, $disk);
-        return $this->executeMethod('putFileAs', [$path, $file, $fileName], $disk);
-    }
-
-    /**
-     * Generate a unique file name to avoid conflicts in the storage.
-     *
-     * @param UploadedFile $file The file being uploaded.
-     * @param string $path The destination path.
-     * @param string|null $newName Optional. The new name for the file.
-     * @param string|null $disk Optional. The storage disk name.
-     * @return string The unique file name.
-     */
-    private function getUniqueFileName(UploadedFile $file, string $path, ?string $newName = null, ?string $disk = null): string
+    protected function getUniqueFileName(UploadedFile $file, string $path, ?string $newName = null): string
     {
         $fileName = $newName ?? $file->getClientOriginalName();
         $fullPath = $path . '/' . $fileName;
 
         $i = 1;
-        while ($this->exists($fullPath, $disk)) {
+        while ($this->exists($fullPath)) {
             $fileName = pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME) . "_{$i}." . $file->getClientOriginalExtension();
             $fullPath = $path . '/' . $fileName;
             $i++;
@@ -86,17 +113,16 @@ class EasyStorage implements BaseStorage
     }
 
     /**
-     * Download a file from the specified path on the storage disk.
+     * Download a file from the storage.
      *
-     * @param string $path The path of the file to download.
-     * @param string|null $newName Optional. The new name for the downloaded file. If not provided, the original name is used.
-     * @param string|null $disk Optional. The storage disk name. If null, uses the default disk.
-     * @return \Symfony\Component\HttpFoundation\BinaryFileResponse
-     * @throws \Symfony\Component\HttpKernel\Exception\NotFoundHttpException If the file does not exist.
+     * @param string $path
+     * @param string|null $newName
+     * @return BinaryFileResponse
+     * @throws NotFoundHttpException
      */
-    public function download(string $path, ?string $newName = null, ?string $disk = null): BinaryFileResponse
+    public function download(string $path, ?string $newName = null): BinaryFileResponse
     {
-        $storageDisk = $this->disk($disk);
+        $storageDisk = $this->disk();
         $fullPath = $storageDisk->path($path);
 
         if (!$storageDisk->exists($path)) {
@@ -104,274 +130,204 @@ class EasyStorage implements BaseStorage
         }
 
         $fileName = $newName ?? basename($path);
-
         return response()->download($fullPath, $fileName);
     }
 
-
     /**
-     * Get the URL of a file in the storage disk.
+     * Delete a file from the storage.
      *
-     * @param string $path The path of the file.
-     * @param string|null $disk The storage disk name. If null, uses the default disk.
-     * @return string The URL of the file.
+     * @param string $path
+     * @return bool
      */
-    public function url(string $path, ?string $disk = null): string
+    public function delete(string $path): bool
     {
-        return $this->executeMethod('url', [$path], $disk);
+        return $this->executeMethod('delete', [$path]);
     }
 
     /**
-     * Delete a file from the storage disk.
+     * Check if a file exists in the storage.
      *
-     * @param string $path The path of the file to delete.
-     * @param string|null $disk The storage disk name. If null, uses the default disk.
-     * @return bool True if deleted, false otherwise.
+     * @param string $path
+     * @return bool
      */
-    public function delete(string $path, ?string $disk = null): bool
+    public function exists(string $path): bool
     {
-        return $this->executeMethod('delete', [$path], $disk);
+        return $this->executeMethod('exists', [$path]);
     }
 
     /**
-     * Check if a file exists on the storage disk.
+     * Get the URL of a file in the storage.
      *
-     * @param string $path The path of the file.
-     * @param string|null $disk The storage disk name. If null, uses the default disk.
-     * @return bool True if the file exists, false otherwise.
+     * @param string $path
+     * @return string
      */
-    public function exists(string $path, ?string $disk = null): bool
+    public function url(string $path): string
     {
-        return $this->executeMethod('exists', [$path], $disk);
+        return $this->executeMethod('url', [$path]);
     }
 
     /**
-     * Get metadata for a file.
+     * Copy a file to a new location.
      *
-     * @param string $path The path of the file.
-     * @param string|null $disk The storage disk name. If null, uses the default disk.
-     * @return array|false An array of metadata if successful, false otherwise.
+     * @param string $from
+     * @param string $to
+     * @return bool
+     */
+    public function copy(string $from, string $to): bool
+    {
+        return $this->executeMethod('copy', [$from, $to]);
+    }
+
+    /**
+     * Move a file to a new location.
+     *
+     * @param string $from
+     * @param string $to
+     * @return bool
+     */
+    public function move(string $from, string $to): bool
+    {
+        return $this->executeMethod('move', [$from, $to]);
+    }
+
+    /**
+     * Get the size of a file in the storage.
+     *
+     * @param string $path
+     * @return int|false
+     */
+    public function size(string $path): int|false
+    {
+        return $this->executeMethod('size', [$path]);
+    }
+
+    /**
+     * Get the last modified time of a file in the storage.
+     *
+     * @param string $path
+     * @return int|false
+     */
+    public function lastModified(string $path): int|false
+    {
+        return $this->executeMethod('lastModified', [$path]);
+    }
+
+    /**
+     * Get metadata of a file in the storage.
+     *
+     * @param string $path
+     * @param string|null $disk
+     * @return array|false
      */
     public function getMetadata(string $path, ?string $disk = null): array|false
     {
-        return $this->executeMethod('getMetadata', [$path], $disk);
+        return $this->executeMethod('getMetadata', [$path]);
     }
 
     /**
-     * Set metadata for a file (currently a placeholder).
+     * Set metadata of a file in the storage.
      *
-     * @param string $path The path of the file.
-     * @param array $metadata The metadata to set.
-     * @param string|null $disk The storage disk name. If null, uses the default disk.
-     * @return bool Always returns false as it's not implemented.
+     * @param string $path
+     * @param array $metadata
+     * @param string|null $disk
+     * @return bool
      */
     public function setMetadata(string $path, array $metadata, ?string $disk = null): bool
     {
-        return false; // Placeholder for metadata setting
+        return $this->executeMethod('setMetadata', [$path, $metadata]);
     }
 
     /**
      * List files in a directory.
      *
-     * @param string $directory The directory to list files from.
-     * @param string|null $disk The storage disk name. If null, uses the default disk.
-     * @return array An array of file paths.
+     * @param string $directory
+     * @param string|null $disk
+     * @return array
      */
     public function listFiles(string $directory, ?string $disk = null): array
     {
-        return $this->executeMethod('files', [$directory], $disk);
-    }
-
-    /**
-     * Move a file from one path to another.
-     *
-     * @param string $oldPath The current path of the file.
-     * @param string $newPath The new path for the file.
-     * @param string|null $disk The storage disk name. If null, uses the default disk.
-     * @return bool True if moved, false otherwise.
-     */
-    public function move(string $oldPath, string $newPath, ?string $disk = null): bool
-    {
-        $storageDisk = $this->disk($disk);
-    
-        if ($storageDisk->exists($newPath)) {
-            $pathInfo = pathinfo($newPath);
-            $baseName = $pathInfo['filename'];
-            $extension = isset($pathInfo['extension']) ? '.' . $pathInfo['extension'] : '';
-            $i = 1;
-
-            do {
-                $newPath = $pathInfo['dirname'] . '/' . $baseName . "_{$i}" . $extension;
-                $i++;
-            } while ($storageDisk->exists($newPath));
-        }
-
-        return $this->executeMethod('move', [$oldPath, $newPath], $disk);
-    }
-
-    /**
-     * Get the file type (MIME type) of a file.
-     *
-     * @param string $path The path of the file.
-     * @param string|null $disk The storage disk name. If null, uses the default disk.
-     * @return string The MIME type of the file.
-     */
-    public function getFileType(string $path, ?string $disk = null): string
-    {
-        return $this->executeMethod('mimeType', [$path], $disk);
-    }
-
-    /**
-     * Copy a file from a source path to a destination path.
-     *
-     * @param string $sourcePath The source path of the file.
-     * @param string $destinationPath The destination path for the copied file.
-     * @param string|null $disk The storage disk name. If null, uses the default disk.
-     * @return bool True if copied, false otherwise.
-     */
-    public function copy(string $sourcePath, string $destinationPath, ?string $disk = null): bool
-    {
-        $storageDisk = $this->disk($disk);
-
-        if ($storageDisk->exists($destinationPath)) {
-            $pathInfo = pathinfo($destinationPath);
-            $baseName = $pathInfo['filename'];
-            $extension = isset($pathInfo['extension']) ? '.' . $pathInfo['extension'] : '';
-            $i = 1;
-
-            do {
-                $destinationPath = $pathInfo['dirname'] . '/' . $baseName . "_copy_{$i}" . $extension;
-                $i++;
-            } while ($storageDisk->exists($destinationPath));
-        }
-
-        return $this->executeMethod('copy', [$sourcePath, $destinationPath], $disk);
+        return $this->executeMethod('files', [$directory]);
     }
 
     /**
      * Prepend data to a file.
      *
-     * @param string $path The path of the file.
-     * @param string $data The data to prepend.
-     * @param string|null $disk The storage disk name. If null, uses the default disk.
-     * @return bool True if successful, false otherwise.
+     * @param string $path
+     * @param string $data
+     * @param string|null $disk
+     * @return bool
      */
     public function prepend(string $path, string $data, ?string $disk = null): bool
     {
-        if (!$this->disk($disk)->exists($path)) {
-            throw new NotFoundHttpException("File not found for prepending data.");
-        }
-    
-        return $this->executeMethod('prepend', [$path, $data], $disk);
+        return $this->executeMethod('prepend', [$path, $data]);
     }
 
     /**
      * Append data to a file.
      *
-     * @param string $path The path of the file.
-     * @param string $data The data to append.
-     * @param string|null $disk The storage disk name. If null, uses the default disk.
-     * @return bool True if successful, false otherwise.
+     * @param string $path
+     * @param string $data
+     * @param string|null $disk
+     * @return bool
      */
     public function append(string $path, string $data, ?string $disk = null): bool
     {
-        if (!$this->disk($disk)->exists($path)) {
-            throw new NotFoundHttpException("File not found for appending data.");
-        }
-    
-        return $this->executeMethod('append', [$path, $data], $disk);
+        return $this->executeMethod('append', [$path, $data]);
     }
 
     /**
-     * Create a new directory.
+     * Create a directory.
      *
-     * @param string $path The path of the directory to create.
-     * @param string|null $disk The storage disk name. If null, uses the default disk.
-     * @return bool True if created, false if it already exists or on failure.
+     * @param string $path
+     * @param string|null $disk
+     * @return bool
      */
     public function makeDirectory(string $path, ?string $disk = null): bool
     {
-        if ($this->disk($disk)->exists($path)) {
-            return false;
-        }
-    
-        return $this->executeMethod('makeDirectory', [$path], $disk);
+        return $this->executeMethod('makeDirectory', [$path]);
     }
 
     /**
      * Delete a directory.
      *
-     * @param string $path The path of the directory to delete.
-     * @param string|null $disk The storage disk name. If null, uses the default disk.
-     * @return bool True if deleted, false if it doesn't exist or on failure.
+     * @param string $path
+     * @param string|null $disk
+     * @return bool
      */
     public function deleteDirectory(string $path, ?string $disk = null): bool
     {
-        if (!$this->disk($disk)->exists($path)) {
-            return false;
-        }
-
-        return $this->executeMethod('deleteDirectory', [$path], $disk);
+        return $this->executeMethod('deleteDirectory', [$path]);
     }
 
     /**
-     * Enable or disable error logging.
+     * Execute a custom method on the storage disk.
      *
-     * @param bool $log Whether to enable logging.
-     * @return self Returns the current instance for method chaining.
+     * @param string $method
+     * @param array $parameters
+     * @param string|null $disk
+     * @return mixed
      */
-    public function withLog(bool $log = true): self
+    public function customMethod(string $method, array $parameters = [], ?string $disk = null)
     {
-        $this->logErrors = $log;
-        return $this;
+        return $this->executeMethod($method, $parameters, $disk);
     }
 
     /**
-     * Enable or disable throwing errors.
+     * Execute a method on the storage disk.
      *
-     * @param bool $throw Whether to enable throwing exceptions on errors.
-     * @return self Returns the current instance for method chaining.
+     * @param string $method
+     * @param array $parameters
+     * @return mixed
+     *
+     * @throws StorageMethodNotSupportedException
      */
-    public function withError(bool $throw = true): self
+    protected function executeMethod(string $method, array $parameters)
     {
-        $this->throwErrors = $throw;
-        return $this;
-    }
-
-    /**
-     * Execute a custom storage method. WIP - Work in Progress!
-     *
-     * This method allows you to call any method on the storage disk that is not explicitly defined in the EasyStorage class.
-     * If the method does not exist on the storage disk, a StorageMethodNotSupportedException is thrown.
-     *
-     * @param string $method The name of the method to execute.
-     * @param string|null $disk The storage disk name. If null, uses the default disk.
-     * @return CustomMethod An instance of the custom method, which can be executed or modified with parameters.
-     */
-    public function customMethod(string $method, array $parameters = [], ?string $disk = null): CustomMethod
-    {
-        $customMethod = new CustomMethod($method, $disk);
-        $customMethod->withParameters($parameters);
-        return $customMethod;
-    }
-
-    /**
-     * Executes a storage method with error handling.
-     *
-     * @param string $method The name of the method to execute.
-     * @param array $parameters The parameters to pass to the method.
-     * @param string|null $disk The storage disk name. If null, uses the default disk.
-     * @return mixed The result of the executed method.
-     * @throws StorageMethodNotSupportedException if the method is not supported.
-     * @throws Exception if an error occurs and throwing is enabled.
-     */
-    protected function executeMethod(string $method, array $parameters, ?string $disk = null)
-    {
-        $diskInstance = $this->disk($disk);
+        $diskInstance = $this->disk();
 
         if (!method_exists($diskInstance, $method)) {
             if ($this->logErrors) {
-                Log::error("EasyStorage: Method {$method} not supported on disk {$disk}.");
+                Log::error("EasyStorage: Method {$method} not supported on disk {$this->disk}.");
             }
             return $this->throwErrors
                 ? throw new StorageMethodNotSupportedException("Method {$method} not supported on the selected storage disk.")
@@ -382,7 +338,7 @@ class EasyStorage implements BaseStorage
             return $diskInstance->{$method}(...$parameters);
         } catch (Exception $e) {
             if ($this->logErrors) {
-                Log::error("EasyStorage: Error executing method {$method} on disk {$disk}: {$e->getMessage()}");
+                Log::error("EasyStorage: Error executing method {$method} on disk {$this->disk}: {$e->getMessage()}");
             }
             return $this->throwErrors ? throw $e : false;
         }

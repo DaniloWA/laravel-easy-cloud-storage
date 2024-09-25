@@ -1,6 +1,6 @@
 # Laravel EasyCloudStorage
 
-Laravel EasyCloudStorage is a flexible and intuitive package designed to streamline cloud storage management within Laravel applications. It provides a clean interface for interacting with various storage providers, including local disks, Amazon S3, and Google Cloud Storage.
+Laravel EasyCloudStorage is a flexible and intuitive package designed to simplify cloud storage management within Laravel applications. It provides a clean interface for interacting with various storage providers, including local disks, Amazon S3, and Google Cloud Storage.
 
 ## Table of Contents
 
@@ -14,13 +14,18 @@ Laravel EasyCloudStorage is a flexible and intuitive package designed to streaml
     - [Getting File URL](#getting-file-url)
     - [Deleting Files](#deleting-files)
     - [Checking File Existence](#checking-file-existence)
-    - [Managing Metadata](#managing-metadata)
+    - [Copying Files](#copying-files)
+    - [Moving Files](#moving-files)
+    - [Getting File Size](#getting-file-size)
+    - [Getting Last Modified Time](#getting-last-modified-time)
+    - [Getting Metadata](#getting-metadata)
+    - [Setting Metadata](#setting-metadata)
     - [Listing Files](#listing-files)
-    - [Moving and Copying Files](#moving-and-copying-files)
-    - [Creating Directories](#creating-directories)
-- [Error Handling](#error-handling)
-- [Driver-Specific Method Availability](#driver-specific-method-availability)
-- [Design Patterns: Facade and Contracts](#design-patterns-facade-and-contracts)
+    - [Prepending and Appending Data](#prepending-and-appending-data)
+    - [Creating and Deleting Directories](#creating-and-deleting-directories)
+  - [Error Handling](#error-handling)
+  - [Driver-Specific Method Availability](#driver-specific-method-availability)
+  - [Design Patterns: Facade and Contracts](#design-patterns-facade-and-contracts)
 - [License](#license)
 
 ## Installation
@@ -39,13 +44,13 @@ php artisan vendor:publish --provider="Danilowa\LaravelEasyCloudStorage\EasyClou
 
 ## Configuration
 
-The configuration file is located at `config/easycloudstorage.php`. Key settings include:
+The configuration file is located at `config/easycloudstorage.php`. The main settings include:
 
 ```php
 return [
     'default' => 'local', // Default disk for storage operations.
     'log_errors' => false, // Enable error logging.
-    'throw_errors' => false, // Enable exception throwing.
+    'throw_errors' => false, // Enable exception throwing for errors.
     'disks' => [
         'local' => [
             'driver' => 'local',
@@ -77,172 +82,284 @@ After configuration, you can use the EasyCloudStorage package for various operat
 
 ### Initial Example
 
+This section demonstrates how to perform a file upload using the EasyCloudStorage package. The example illustrates the process of uploading a file to a specified directory, along with optional logging and error handling configurations.
+
 ```php
 use Danilowa\LaravelEasyCloudStorage\Facades\EasyStorage;
 
+// Assume $uploadedFile is an instance of UploadedFile, obtained from an HTTP request.
 $filePath = EasyStorage::upload($uploadedFile, 'uploads/myfile.txt')
-    ->withLog(true)
-    ->withError(true);
+    ->withLog(true)  // Set error logging behavior. Defaults to true if not specified.
+    ->withError(false) // Set error handling behavior. Defaults to true if not specified.
+    ->setDisk('s3'); // Specify the disk manually instead of using the default.
+
+// Check if the upload was successful
+if($filePath === false) {
+    return echo "Error uploading the file.";
+}
+
+echo "File uploaded successfully: $filePath";
+
 ```
 
-1. **Namespace Import**: Imports the `EasyStorage` facade for convenient method calls.
-2. **Upload Method**:
-   - **Parameters**:
-     - `$uploadedFile`: An instance of `Illuminate\Http\UploadedFile`.
-     - `'uploads/myfile.txt'`: Path for storing the file.
-   - **Returns**: The name of the saved file or `false` on failure.
-3. **Error Handling and Logging**:
-   - **`withLog(true)`**: Enables error logging during the upload.
-   - **`withError(true)`**: Throws exceptions for upload errors.
+### Explanation of the Code:
+
+1. **Use Statement:**
+
+   - The `use` statement imports the `EasyStorage` facade, which allows you to access storage functionalities easily.
+
+2. **Uploading a File:**
+
+   - The `upload` method is called on the `EasyStorage` facade, taking in:
+     - `$uploadedFile`: An instance of `UploadedFile`, typically obtained from a file upload in an HTTP request.
+     - `'uploads/myfile.txt'`: The destination path where the file will be stored on the disk.
+
+3. **Error Logging Configuration:**
+
+   - The `withLog` method allows you to control error logging during the upload process:
+     - **Enabled (true):** Error logging is activated for the upload operation.
+     - **Disabled (false):** Turns off error logging.
+     - **Default Behavior:** If called without parameters, it assumes `true`, enabling error logging by default.
+     - **Configuration Fallback:** If not used, the package utilizes the error logging setting specified in the configuration file.
+
+4. **Error Handling Configuration:**
+
+   - The `withError` method configures whether to throw exceptions when errors occur during the upload process:
+     - **Throw Exceptions (true):** System will throw exceptions for any encountered errors.
+     - **Do Not Throw Exceptions (false):** Prevents exceptions from being thrown.
+     - **Default Behavior:** If called without parameters, it defaults to `true`.
+     - **Configuration Fallback:** Follows the error handling configuration specified in the configuration file.
+
+5. **Setting the Disk:**
+
+   - The `setDisk` method allows you to manually specify the storage disk to be used, overriding the default disk configuration.
+
+6. **Success Check:**
+   - After attempting the upload, the result is stored in `$filePath`. This variable will either contain a string representing the path to the uploaded file or `false` if the upload failed.
+   - The `if` statement checks the value of `$filePath` to determine the success of the upload:
+     - **Successful Upload:** If `$filePath` is of type `string`, it prints a message displaying the path of the uploaded file.
+     - **Unsuccessful Upload:** If `$filePath` is `false`, it indicates that the upload failed, and an error message is displayed.
 
 ### File Operations
 
 #### Uploading Files
 
-To upload a file:
+Upload a file to the specified path on the storage disk.
 
 ```php
-// Upload to the default disk (local)
-$filePath = EasyStorage::upload($uploadedFile, 'uploads/myfile.txt');
+$filePath = EasyStorage::upload($uploadedFile, 'uploads/myfile.txt', 'banana.txt');
 
 // Upload to a specific disk (S3)
-$filePathS3 = EasyStorage::upload($uploadedFile, 'uploads/myfile.txt', 's3');
+$filePathS3 = EasyStorage::upload($uploadedFile, 'uploads/myfile.txt')->setDisk('s3');
 ```
+
+- **Parameters:**
+
+  - `UploadedFile $file`: The file to upload.
+  - `string $path`: The destination path for the upload.
+  - `string|null $newName`: Optional. The new name for the file; the original name is used if not provided.
+
+- **Returns:** `string|false` - The file path if successful; `false` otherwise.
 
 #### Downloading Files
 
-To download a file:
+Download a file from the specified path on the storage disk.
 
 ```php
-// Download from the default disk
-return EasyStorage::download('uploads/myfile.txt');
-
-// Download from a specific disk (S3)
-return EasyStorage::download('uploads/myfile.txt', 's3');
+return EasyStorage::download('uploads/myfile.txt', 'name.txt')->withLog();
 ```
+
+- **Parameters:**
+
+  - `string $path`: The path of the file to download.
+  - `string|null $newName`: Optional. The new name for the downloaded file; the original name is used if not provided.
+
+- **Returns:** `BinaryFileResponse`
+
+- **Throws:** `NotFoundHttpException` if the file does not exist.
 
 #### Getting File URL
 
-To retrieve the URL of a stored file:
+Retrieve the URL of the stored file.
 
 ```php
-// Get URL from the default disk
 $fileUrl = EasyStorage::url('uploads/myfile.txt');
-
-// Get URL from a specific disk (Google Cloud)
-$fileUrlGoogle = EasyStorage::url('uploads/myfile.txt', 'google');
 ```
+
+- **Parameters:**
+
+  - `string $path`: The path of the file.
+
+- **Returns:** `string` - The URL of the file.
 
 #### Deleting Files
 
-To delete a file:
+Delete a file at the specified path.
 
 ```php
-// Delete from the default disk
 $deleted = EasyStorage::delete('uploads/myfile.txt');
-
-// Delete from a specific disk (S3)
-$deletedS3 = EasyStorage::delete('uploads/myfile.txt', 's3');
 ```
+
+- **Parameters:**
+
+  - `string $path`: The path of the file to be deleted.
+
+- **Returns:** `bool` - Returns `true` on success, `false` otherwise.
 
 #### Checking File Existence
 
-To verify if a file exists:
+Check if a file exists at the specified path.
 
 ```php
-// Check existence on the default disk
 $exists = EasyStorage::exists('uploads/myfile.txt');
-
-// Check existence on a specific disk (Google Cloud)
-$existsGoogle = EasyStorage::exists('uploads/myfile.txt', 'google');
 ```
 
-#### Managing Metadata
+- **Parameters:**
 
-To obtain a file's metadata:
+  - `string $path`: The path of the file.
+
+- **Returns:** `bool` - Returns `true` if it exists, `false` otherwise.
+
+#### Copying Files
+
+Copy a file from a source path to a destination path.
 
 ```php
-// Get metadata from the default disk
-$metadata = EasyStorage::getMetadata('uploads/myfile.txt');
-
-// Get metadata from a specific disk (S3)
-$metadataS3 = EasyStorage::getMetadata('uploads/myfile.txt', 's3');
+$copied = EasyStorage::copy('uploads/myfile.txt', 'uploads/myfile_copy.txt');
 ```
+
+- **Parameters:**
+
+  - `string $from`: The path of the source file.
+  - `string $to`: The destination path.
+
+- **Returns:** `bool` - Returns `true` on success, `false` otherwise.
+
+#### Moving Files
+
+Move or rename a file.
+
+```php
+$success = EasyStorage::move('uploads/myfile.txt', 'uploads/newfile.txt');
+```
+
+- **Parameters:**
+  - `string $from`: The old path of the file.
+  - `string
+
+$to`: The new path.
+
+- **Returns:** `bool` - Returns `true` on success, `false` otherwise.
+
+#### Getting File Size
+
+Retrieve the size of a file in bytes.
+
+```php
+$size = EasyStorage::size('uploads/myfile.txt');
+```
+
+- **Parameters:**
+
+  - `string $path`: The path of the file.
+
+- **Returns:** `int|null` - Returns the file size in bytes or `null` if the file does not exist.
+
+#### Getting Last Modified Time
+
+Get the last modified timestamp of a file.
+
+```php
+$lastModified = EasyStorage::lastModified('uploads/myfile.txt');
+```
+
+- **Parameters:**
+
+  - `string $path`: The path of the file.
+
+- **Returns:** `int|null` - Returns the timestamp or `null` if the file does not exist.
+
+#### Getting Metadata
+
+Retrieve metadata for a file.
+
+```php
+$metadata = EasyStorage::metadata('uploads/myfile.txt');
+```
+
+- **Parameters:**
+
+  - `string $path`: The path of the file.
+
+- **Returns:** `array|null` - Returns metadata or `null` if the file does not exist.
+
+#### Setting Metadata
+
+Set metadata for a file.
+
+```php
+$success = EasyStorage::setMetadata('uploads/myfile.txt', [
+    'Content-Type' => 'application/pdf',
+]);
+```
+
+- **Parameters:**
+
+  - `string $path`: The path of the file.
+  - `array $metadata`: The metadata to set.
+
+- **Returns:** `bool` - Returns `true` on success, `false` otherwise.
 
 #### Listing Files
 
-To list files in a directory:
+List files in a specified directory.
 
 ```php
-// List files in the default disk
-$files = EasyStorage::listFiles('uploads');
-
-// List files in a specific disk (Google Cloud)
-$filesGoogle = EasyStorage::listFiles('uploads', 'google');
+$files = EasyStorage::list('uploads');
 ```
 
-#### Moving and Copying Files
+- **Parameters:**
 
-To move or rename a file:
+  - `string $directory`: The directory path.
+
+- **Returns:** `array` - An array of file names.
+
+#### Prepending and Appending Data
+
+Prepend or append data to a file.
 
 ```php
-// Move from the default disk
-$success = EasyStorage::move('uploads/myfile.txt', 'uploads/newfile.txt');
-
-// Move from a specific disk (S3)
-$successS3 = EasyStorage::move('uploads/myfile.txt', 'uploads/newfile.txt', 's3');
+$successPrepend = EasyStorage::prepend('uploads/myfile.txt', 'Header data');
+$successAppend = EasyStorage::append('uploads/myfile.txt', 'Footer data');
 ```
 
-To copy a file:
+- **Parameters:**
+
+  - `string $path`: The path of the file.
+  - `string $data`: The data to prepend or append.
+
+- **Returns:** `bool` - Returns `true` on success, `false` otherwise.
+
+#### Creating and Deleting Directories
+
+Create or delete a directory.
 
 ```php
-// Copy from the default disk
-$copied = EasyStorage::copy('uploads/myfile.txt', 'uploads/myfile_copy.txt');
-
-// Copy from a specific disk (Google Cloud)
-$copiedGoogle = EasyStorage::copy('uploads/myfile.txt', 'uploads/myfile_copy.txt', 'google');
+EasyStorage::createDirectory('uploads/new_directory');
+EasyStorage::deleteDirectory('uploads/old_directory');
 ```
 
-#### Creating Directories
+- **Parameters:**
 
-To create a new directory:
+  - `string $directory`: The directory path.
 
-```php
-// Create directory on the default disk
-$created = EasyStorage::makeDirectory('uploads/new_directory');
+- **Returns:** `bool` - Returns `true` on success, `false` otherwise.
 
-// Create directory on a specific disk (S3)
-$createdS3 = EasyStorage::makeDirectory('uploads/new_directory', 's3');
-```
+### Error Handling
 
-## Error Handling
+You can enable error logging and exception throwing through the configuration or method chaining. Use the `withLog()` and `withError()` methods to customize error handling per operation.
 
-The Laravel EasyCloudStorage package offers flexible error handling via two configuration options: `log_errors` and `throw_errors`.
-
-- **`log_errors`**: When enabled, any errors encountered during storage operations will be logged, aiding in monitoring and diagnosing issues without interrupting the user experience.
-- **`throw_errors`**: When activated, the package throws exceptions upon errors, allowing developers to implement custom error handling logic for immediate issue resolution.
-
-### Example
-
-To enable both logging and exception throwing during an upload operation, use:
-
-```php
-$filePath = EasyStorage::upload($uploadedFile, 'uploads/myfile.txt')
-    ->withLog(true)
-    ->withError(true);
-```
-
-### Security and Stability
-
-This error handling strategy enhances application security and stability by:
-
-- Logging errors without exposing sensitive information, facilitating easier debugging.
-- Preventing application crashes due to unsupported operations, allowing for graceful error management.
-- Providing configurable settings that empower developers to choose their preferred error handling strategy, aligning with the specific needs of their applications.
-
-By managing errors effectively, the package fosters a more robust and maintainable codebase.
-
-## Driver-Specific Method Availability
+### Driver-Specific Method Availability
 
 It's important to note that not all storage drivers will support every method available in the EasyCloudStorage package. The functionality provided depends exclusively on the capabilities of each specific driver, such as Google Cloud Storage, Amazon S3, and others.
 
@@ -250,13 +367,13 @@ For example, while uploading and deleting files are common operations across mos
 
 Rest assured, the EasyCloudStorage package has built-in logic to handle these discrepancies gracefully. If a method is not available for a specific driver, an informative error will be returned, ensuring that you are promptly notified of the limitation. This design allows you to implement your logic without the worry of unexpected failures, promoting a smooth development experience.
 
-## Design Patterns: Facade and Contracts
+### Design Patterns: Facade and Contracts
 
-### Facade
+**Facade**
 
 The Facade pattern in Laravel offers a simple and intuitive interface to access classes within the application’s service container. By utilizing the EasyStorage facade, you can invoke methods directly without having to resolve the underlying service each time. This approach not only streamlines your code but also improves readability, allowing you to concentrate on building features rather than managing complex dependencies. The result is a cleaner and more efficient API that enhances your development experience.
 
-### Contracts
+**Contracts**
 
 Contracts in Laravel define the expected behaviors of services, providing a clear guideline for how they should operate. By utilizing contracts, you ensure that your application can easily switch between different implementations of a service without affecting the code that interacts with it. This flexibility is beneficial for developers, as it allows for easier updates or changes to the underlying logic without requiring significant code alterations.
 
@@ -264,4 +381,4 @@ For users, this means a more reliable and maintainable application. You can conf
 
 ## License
 
-This package is licensed under the MIT License. See the [LICENSE](LICENSE) file for more details.
+This package is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
